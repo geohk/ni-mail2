@@ -61,6 +61,10 @@ export default {
         return proxyToMailbox(env, mailbox, `/internal/inbox?folder=${encodeURIComponent(folder)}`, { method: "DELETE" });
       }
 
+      if (request.method === "GET" && url.pathname === "/api/mailboxes") {
+        return json(await listMailboxes(env));
+      }
+
       const mailboxBase = url.pathname.match(/^\/api\/mailboxes\/([^/]+)(\/.*)?$/);
       if (mailboxBase) {
         const mailboxId = normalizeEmail(decodeURIComponent(mailboxBase[1]!));
@@ -193,6 +197,8 @@ export default {
         const textBody = await response.text();
         throw new Error(`mailbox storage failed: ${textBody}`);
       }
+
+      await recordMailbox(env, mailbox);
     } catch (error) {
       message.setReject(`worker failed to process email: ${stringifyError(error)}`);
     }
@@ -211,6 +217,26 @@ async function proxyToMailbox(env: Env, mailboxId: string, path: string, init?: 
   const stub = mailboxStub(env, mailboxId);
   const request = new Request(`https://mailbox.internal${path}`, init);
   return await stub.fetch(request);
+}
+
+const MAILBOX_INDEX_PREFIX = "mailboxes/";
+
+async function recordMailbox(env: Env, mailbox: string): Promise<void> {
+  await env.BUCKET.put(`${MAILBOX_INDEX_PREFIX}${mailbox}`, mailbox);
+}
+
+async function listMailboxes(env: Env): Promise<string[]> {
+  const mailboxes: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await env.BUCKET.list({ prefix: MAILBOX_INDEX_PREFIX, cursor });
+    for (const object of result.objects) {
+      const mailbox = object.key.slice(MAILBOX_INDEX_PREFIX.length).trim();
+      if (mailbox) mailboxes.push(mailbox);
+    }
+    cursor = result.truncated ? result.cursor : undefined;
+  } while (cursor);
+  return [...new Set(mailboxes)].sort();
 }
 
 function serializeError(error: unknown): Record<string, unknown> {

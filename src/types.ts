@@ -32,6 +32,16 @@ export interface R2ObjectBodyLike {
   };
 }
 
+export interface R2ObjectLike {
+  key: string;
+}
+
+export interface R2ListResultLike {
+  objects: R2ObjectLike[];
+  truncated: boolean;
+  cursor?: string;
+}
+
 export interface R2BucketLike {
   put(
     key: string,
@@ -45,6 +55,7 @@ export interface R2BucketLike {
   ): Promise<void>;
   get(key: string): Promise<R2ObjectBodyLike | null>;
   delete(keys: string | string[]): Promise<void>;
+  list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<R2ListResultLike>;
 }
 
 export interface EmailAttachment {
